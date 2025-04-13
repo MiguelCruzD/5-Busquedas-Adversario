@@ -1,15 +1,16 @@
-"""
-Modulo con el minimax con algunos los poderes
-
-    1- Poda alfa-beta
-    2- Ordenamiento de jugadas
-    3- Evaluacion de estados
-    4- Busqueda iterativa
-    5- Tablas de transposicion
-    6- Trazabilidad
-"""
 from random import shuffle
 from time import time
+
+
+def estado_hashable(estado):
+    # Primero recorrer subtableros, luego las filas dentro de cada subtablero
+    tablero_hashable = tuple(
+        tuple(
+            tuple(celda) for celda in fila
+        ) for subtablero in estado['tablero'] for fila in subtablero
+    )
+    return tablero_hashable
+
 
 def negamax(
     juego, estado, jugador,
@@ -17,30 +18,6 @@ def negamax(
     d=None, evalua=None,
     transp={}, traza=[]
     ):
-    """
-    Devuelve la mejor jugada para el jugador en el estado
-    
-    Parametros
-    ----------
-    juego (ModeloJuegoZT): Modelo del juego
-    estado (tuple): Estado del juego
-    jugador (-1, 1): Jugador que realiza la jugada
-    alpha (float): Limite inferior
-    beta (float): Limite superior
-    ordena (function:) Funcion de ordenamiento
-        si None, ordena aleatoriamente
-    d (int): Profundidad. 
-        Si None, busca hasta el final
-    evalua: function de evaluación
-        Siempre evalua para el jugador 1
-    transp (dict): Tabla de transposición
-    traza (list): Trazabilidad
-    
-    Regresa
-    -------
-    tuple: (lista mejores jugadas, valor)
-    
-    """
     if d != None and evalua == None:
         raise ValueError("Se necesita evalua si d no es None")
     if type(ordena) != type(None) and type(ordena) != type(lambda x: x):
@@ -52,15 +29,19 @@ def negamax(
     if type(traza) != list: 
         raise ValueError("traza debe ser una lista")
 
-    if juego.terminal(estado):
-        return [], jugador * juego.ganancia(estado)
+    if juego.es_terminal(estado):
+        return [], juego.utilidad(estado, 'X') if jugador == 1 else juego.utilidad(estado, 'O')
     if d == 0:
         return [], jugador * evalua(estado)
-    if d != None and estado in transp and transp[estado][1] >= d:
-        return [], transp[estado][0]
+    
+    # Convertir el estado en una representación hashable para usarlo en las transposiciones
+    estado_hash = estado_hashable(estado)
+    
+    if d != None and estado_hash in transp and transp[estado_hash][1] >= d:
+        return [], transp[estado_hash][0]
     
     v = -1e10
-    jugadas = list(juego.jugadas_legales(estado, jugador))
+    jugadas = list(juego.acciones(estado))
     if ordena != None:
         jugadas = ordena(jugadas, jugador)
     else:
@@ -71,7 +52,7 @@ def negamax(
             jugadas = [a_pref] + [a for a in jugadas if a != a_pref]
     for a in jugadas:
         traza_actual, v2 = negamax(
-            juego, juego.transicion(estado, a, jugador), -jugador, 
+            juego, juego.resultado(estado, a), -jugador, 
             -beta, -alpha, ordena, d if d == None else d - 1, 
             evalua, transp, traza
         )
@@ -84,17 +65,13 @@ def negamax(
             break
         if v > alpha:
             alpha = v
-    transp[estado] = (v, d)
+    transp[estado_hash] = (v, d)
     return [mejor] + mejores, v 
 
 
 def jugador_negamax(
     juego, estado, jugador, ordena=None, d=None, evalua=None
     ):
-    """
-    Funcion burrito para el negamax
-    
-    """
     traza, _ = negamax(
         juego=juego, estado=estado, jugador=jugador, 
         alpha=-1e10, beta=1e10, ordena=ordena, d=d, 
@@ -106,11 +83,6 @@ def minimax_iterativo(
     juego, estado, jugador, tiempo=10,
     ordena=None, d=None, evalua=None,
     ):  
-    """
-    Devuelve la mejor jugada para el jugador en el estado
-    acotando a un periodo de tiempo
-    
-    """
     t0 = time()
     d, traza = 2, []
     while time() - t0 < tiempo/2:
